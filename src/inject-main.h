@@ -32,6 +32,7 @@ class CSocketInfo
 protected:
 	SOCKET m_socket;
 	bool m_ssl, m_sslShakingHands;
+	bool m_httpProxyConnect;
 	bool m_dataExchanged;
 
 	// for unencrypted data, ready to be fetched from outside:
@@ -50,12 +51,15 @@ public:
 	 **/
 	bool OnSending(bool a_ssl, const char* a_data, size_t a_len);
 	void OnSendingSSLHandshakePacket() { m_sslShakingHands = true; }
+	void OnHTTPProxyConnect() { m_httpProxyConnect = true; }
 
 	void OnAfterReceive(const char* a_data, size_t a_len);
 
 	bool IsSSL() const { return m_ssl; }
 	bool IsSSLShakingHands() const { return m_sslShakingHands; }
 	bool HasExchangedData() const { return m_dataExchanged; }
+
+	bool IsHTTPProxyConnect() const { return m_httpProxyConnect; }
 
 	std::string GetSendBuffer();
 	bool HasReceivedLine() const;

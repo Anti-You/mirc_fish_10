@@ -61,7 +61,7 @@ void CSocketInfo::OnAfterReceive(const char* a_data, size_t a_len)
 {
 	m_receivingBuffer.append(a_data, a_len);
 
-	if(!m_dataExchanged) m_dataExchanged = true;
+	if(!m_dataExchanged && !IsHTTPProxyConnect()) m_dataExchanged = true;
 
 	std::string l_chunk;
 	std::string::size_type l_pos;
@@ -72,17 +72,30 @@ void CSocketInfo::OnAfterReceive(const char* a_data, size_t a_len)
 
 		INJECT_DEBUG_MSG(l_line);
 
-		char* l_szNewLine = FiSH_DLL::_OnIncomingIRCLine(m_socket, l_line.c_str(), l_line.size());
-
-		if(l_szNewLine)
+		if(IsHTTPProxyConnect())
 		{
-			INJECT_DEBUG_MSG("decrypted:"); INJECT_DEBUG_MSG(l_szNewLine);
-			m_receivedBuffer += l_szNewLine;
-			FiSH_DLL::_FreeString(l_szNewLine);
+			if(l_line.empty() || (l_line.size() == 2 && l_line[0] == '\r' && l_line[1] == '\n'))
+			{
+				// empty line = end of HTTP headers
+				m_httpProxyConnect = false;
+			}
+
+			m_receivedBuffer += l_line;
 		}
 		else
 		{
-			m_receivedBuffer += l_line;
+			char* l_szNewLine = FiSH_DLL::_OnIncomingIRCLine(m_socket, l_line.c_str(), l_line.size());
+
+			if(l_szNewLine)
+			{
+				INJECT_DEBUG_MSG("decrypted:"); INJECT_DEBUG_MSG(l_szNewLine);
+				m_receivedBuffer += l_szNewLine;
+				FiSH_DLL::_FreeString(l_szNewLine);
+			}
+			else
+			{
+				m_receivedBuffer += l_line;
+			}
 		}
 	}
 }

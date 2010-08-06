@@ -85,13 +85,40 @@ int WSAAPI my_send_actual(SOCKET s, const char FAR * buf, int len, int flags, se
 
 		::LeaveCriticalSection(&s_socketsLock);
 
-		if(!l_sock->HasExchangedData() && buf != NULL && *buf == 22) // skip SSL handshake packets... oh lord...
-			// http://en.wikipedia.org/wiki/Transport_Layer_Security#TLS_handshake_in_detail
-			// do this for the first packets only, of course.
+		// so we need to look beyond some encapsulations, such as SOCKS4,
+		// SOCKS5, HTTP proxy CONNECT and SSL/TLS.
+
+		bool l_lookForIrcData = true;
+
+		if(!l_sock->HasExchangedData() && buf != NULL)
 		{
-			l_sock->OnSendingSSLHandshakePacket();
+			// 22 == strlen("CONNECT x HTTP/1.0\r\n\r\n")
+			if(len >= 22 && memcmp(buf, "CONNECT ", 8) == 0)
+			{
+				const char* p = buf + 9;
+				for(int i = 9; i < len - 12; i++, p++)
+				{
+					// this is a bit more likely to break with mIRC updates than
+					// the rest of this project, but it's only proxy support, so who cares.
+					if(memcmp(p, " HTTP/1.0\r\n\r\n", 12) == 0)
+					{
+						l_sock->OnHTTPProxyConnect();
+
+						l_lookForIrcData = false;
+						break;
+					}
+				}
+			}
+			else if(*buf == 0x16) // skip SSL handshake packets...
+				// http://en.wikipedia.org/wiki/Transport_Layer_Security#TLS_handshake_in_detail
+			{
+				l_sock->OnSendingSSLHandshakePacket();
+
+				l_lookForIrcData = false;
+			}
 		}
-		else
+		
+		if(l_lookForIrcData)
 		{
 			bool l_modified = l_sock->OnSending(false, buf, len);
 
@@ -148,7 +175,7 @@ int WSAAPI my_recv_actual(SOCKET s, char FAR * buf, int len, int flags, recv_pro
 
 		// important for receiving files via DCC:
 		// IRC server connections will always have sent data before receiving any.
-		if(!l_sock->HasExchangedData())
+		if(!l_sock->HasExchangedData() && !l_sock->IsHTTPProxyConnect())
 		{
 			::EnterCriticalSection(&s_socketsLock);
 			s_sockets.erase(s);
